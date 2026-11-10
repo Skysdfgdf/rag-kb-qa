@@ -1,0 +1,23 @@
+# ── Web 框架 ──
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+pydantic>=2.5
+pydantic-settings>=2.1
+
+# ── 向量库 ──
+chromadb>=0.4.22
+
+# ── Embedding（本地，轻量 onnx，无 torch）──
+fastembed>=0.2.0
+rank_bm25>=0.2.2          # 可选：用于 BM25 + RRF 重排
+
+# ── 文档解析 ──
+PyPDF2>=3.0
+python-docx>=1.1
+
+# ── LLM / Embedding API（OpenAI 兼容）──
+openai>=1.12
+
+# ── 配置加载 ──
+python-dotenv>=1.0

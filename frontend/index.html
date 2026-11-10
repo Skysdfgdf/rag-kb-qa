@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RAG 知识库问答 · 带引用溯源</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --panel: #ffffff; --border: #e3e6ef; --text: #1f2430;
+    --muted: #6b7280; --primary: #4f46e5; --primary-soft: #eef2ff;
+    --cite: #f59e0b; --cite-soft: #fff7ed; --danger: #ef4444; --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    padding: 14px 22px; background: var(--panel); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  header h1 { font-size: 17px; margin: 0; }
+  header .badge { font-size: 12px; color: var(--muted); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 999px; }
+  .layout { flex: 1; display: flex; min-height: 0; }
+  .sidebar {
+    width: 300px; background: var(--panel); border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+  }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .section-title { font-size: 13px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em; margin: 0 0 10px; }
+  .upload-box {
+    border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 18px;
+    text-align: center; cursor: pointer; transition: .15s; background: #fafbff;
+  }
+  .upload-box:hover { border-color: var(--primary); background: var(--primary-soft); }
+  .upload-box small { color: var(--muted); display: block; margin-top: 6px; }
+  .doc-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .doc-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: 10px; font-size: 13px; }
+  .doc-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .doc-item .meta { color: var(--muted); font-size: 11px; }
+  .doc-item button { border: none; background: none; color: var(--danger); cursor: pointer; font-size: 13px; }
+  .chat { flex: 1; overflow-y: auto; padding: 22px; }
+  .answer-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 20px; line-height: 1.75; font-size: 15px; white-space: pre-wrap; }
+  .answer-card .cite {
+    color: var(--cite); background: var(--cite-soft); border: 1px solid #fed7aa;
+    border-radius: 6px; padding: 0 5px; font-size: 12px; cursor: pointer; font-weight: 600;
+    text-decoration: none; margin: 0 1px;
+  }
+  .answer-card .cite:hover { background: #ffedd5; }
+  .sources { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .source-card { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--primary);
+    border-radius: 10px; padding: 12px 14px; }
+  .source-card .top { display: flex; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 6px; }
+  .source-card .idx { background: var(--primary); color: #fff; border-radius: 6px; padding: 1px 7px; font-size: 12px; }
+  .source-card .src { font-weight: 600; }
+  .source-card .pg { color: var(--muted); font-size: 12px; }
+  .source-card .txt { font-size: 13px; color: #374151; line-height: 1.6; max-height: 120px; overflow: auto; }
+  .composer { border-top: 1px solid var(--border); background: var(--panel); padding: 14px 22px;
+    display: flex; gap: 10px; align-items: flex-end; }
+  textarea {
+    flex: 1; resize: none; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+    font-size: 14px; font-family: inherit; height: 52px; outline: none;
+  }
+  textarea:focus { border-color: var(--primary); }
+  .btn { background: var(--primary); color: #fff; border: none; border-radius: 10px; padding: 0 20px;
+    height: 52px; font-size: 14px; cursor: pointer; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .opts { display: flex; gap: 14px; align-items: center; font-size: 13px; color: var(--muted); padding: 0 22px 4px; }
+  .opts select { border: 1px solid var(--border); border-radius: 8px; padding: 3px 6px; font-size: 13px; }
+  .empty { color: var(--muted); text-align: center; margin-top: 80px; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
+    border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #111827; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: .2s; }
+  .toast.show { opacity: .95; }
+
+  /* 登录遮罩 */
+  .login-mask { position: fixed; inset: 0; background: rgba(17,24,39,.55);
+    display: flex; align-items: center; justify-content: center; z-index: 60; }
+  .login-mask.hidden { display: none; }
+  .login-card { background: #fff; border-radius: 14px; padding: 28px 26px; width: 330px;
+    box-shadow: 0 12px 44px rgba(0,0,0,.22); }
+  .login-card h2 { margin: 0 0 4px; font-size: 18px; }
+  .login-card p { color: var(--muted); font-size: 13px; margin: 0 0 16px; line-height: 1.6; }
+  .login-card input { width: 100%; box-sizing: border-box; border: 1px solid var(--border);
+    border-radius: 10px; padding: 11px 12px; font-size: 14px; margin-bottom: 12px; outline: none; }
+  .login-card input:focus { border-color: var(--primary); }
+  .login-card .btn { width: 100%; }
+  .login-err { color: var(--danger); font-size: 13px; min-height: 18px; margin-bottom: 8px; }
+  #authBadge { margin-left: auto; cursor: pointer; color: var(--primary); }
+  .btn-badge { cursor: pointer; background: var(--primary-soft); color: var(--primary);
+    border: 1px solid #c7d2fe; font-family: inherit; }
+  .login-card .btn.ghost { background: #fff; color: var(--muted); border: 1px solid var(--border);
+    margin-top: 10px; }
+  .login-card.wide { width: 460px; max-height: 70vh; overflow: auto; }
+  .admin-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .admin-row { display: flex; align-items: center; gap: 8px; font-size: 13px;
+    border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+  .admin-row .t { flex: 1; font-family: ui-monospace, monospace; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .admin-row .m { color: var(--muted); font-size: 11px; }
+  .admin-row button { border: none; background: none; color: var(--danger); cursor: pointer; font-size: 12px; }
+  .lib-notice { margin: 14px 0 0; padding: 10px 12px; border-radius: 10px; font-size: 12.5px;
+    line-height: 1.65; background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+
+  /* 我的资料库面板 */
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .code-row { display: flex; gap: 8px; align-items: stretch; }
+  .code-box { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px; background: #f8fafc; border: 1px solid var(--border); border-radius: 9px;
+    padding: 9px 10px; word-break: break-all; line-height: 1.5; color: #334155; }
+  .code-row .mini { border: 1px solid var(--border); background: #fff; color: var(--primary);
+    border-radius: 9px; padding: 0 12px; font-size: 12.5px; cursor: pointer; font-family: inherit;
+    white-space: nowrap; }
+  .code-row .mini:hover { background: var(--primary-soft); }
+  .field input[type=text] { width: 100%; box-sizing: border-box; border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; font-size: 13px; outline: none;
+    font-family: ui-monospace, monospace; }
+  .field input[type=text]:focus { border-color: var(--primary); }
+  .hint { font-size: 12px; color: var(--muted); line-height: 1.65; margin: 6px 0 0; }
+  .link-btn { background: none; border: none; color: var(--primary); cursor: pointer;
+    font-size: 12.5px; padding: 0; font-family: inherit; text-decoration: underline; }
+
+  /* 移动端适配：竖排布局，自然滚动，输入框吸底 */
+  @media (max-width: 768px) {
+    body { height: auto; min-height: 100vh; }
+    header { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
+    header h1 { font-size: 16px; }
+    .layout { flex-direction: column; }
+    .sidebar {
+      width: 100%; border-right: none; border-bottom: 1px solid var(--border);
+      padding: 14px; overflow: visible;
+    }
+    .main { flex: none; }
+    .chat { overflow: visible; padding: 14px; }
+    .empty { margin-top: 40px; }
+    .opts { padding: 8px 14px 0; flex-wrap: wrap; gap: 10px; }
+    .composer { padding: 10px 14px 12px; position: sticky; bottom: 0; z-index: 5; }
+    textarea { height: 44px; font-size: 15px; }
+    .btn { height: 44px; padding: 0 16px; }
+    .answer-card { font-size: 14px; padding: 14px 16px; }
+    .login-card { width: calc(100vw - 32px); max-width: 330px; }
+    .login-card.wide { width: calc(100vw - 32px); max-width: 460px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>📚 RAG 知识库问答</h1>
+  <span class="badge">带引用溯源 · 多设备独立资料库</span>
+  <span class="badge" id="tenantTag" onclick="openLibPanel()" style="cursor:pointer;">库 —</span>
+  <span class="badge" id="authBadge" onclick="onIdentityClick()">👤 游客 · 我的资料库</span>
+  <button class="badge btn-badge" id="adminBtn" onclick="openAdminPanel()" hidden>资料库总览</button>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div id="uploadSection">
+      <p class="section-title">上传文档</p>
+      <label class="upload-box" for="file">
+        ⬆️ 点击选择文件
+        <small id="uploadHint">支持 txt / md / pdf / docx</small>
+      </label>
+      <input id="file" type="file" accept=".txt,.md,.pdf,.docx" hidden />
+    </div>
+
+    <div id="readonlyNotice" class="upload-box" style="cursor:default;background:#f0fdf4;border-color:#bbf7d0;color:#15803d;" hidden>
+      👁 只读：当前身份不能向这个资料库写入
+    </div>
+
+    <div id="libNotice" class="lib-notice" hidden></div>
+
+    <p class="section-title" style="margin-top:18px;">本资料库文档</p>
+    <div class="doc-list" id="docList">
+      <span style="color:var(--muted);font-size:13px;">暂无文档</span>
+    </div>
+  </aside>
+
+  <section class="main">
+    <div class="opts">
+      <label><input type="checkbox" id="streamToggle" checked /> 流式输出</label>
+      <label>限定文档：
+        <select id="docFilter"><option value="">全部</option></select>
+      </label>
+    </div>
+
+    <div class="chat" id="chat">
+      <div class="empty" id="empty">上传文档后，在下方输入问题即可获得<strong>带出处</strong>的答案。</div>
+    </div>
+
+    <div class="composer">
+      <textarea id="question" placeholder="例如：这份文档里提到的核心结论是什么？" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();ask();}"></textarea>
+      <button class="btn" id="askBtn" onclick="ask()">提问</button>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="login-mask hidden" id="loginMask">
+  <div class="login-card">
+    <h2>🔐 主设备登录</h2>
+    <p>输入管理员口令可进入<strong>主设备资料库</strong>。<br>其他设备无需口令，以游客身份继续即可，各自拥有独立资料库。</p>
+    <div class="login-err" id="loginErr"></div>
+    <input id="pwInput" type="password" placeholder="管理员口令" onkeydown="if(event.key==='Enter'){doLogin();}" autofocus />
+    <button class="btn" onclick="doLogin()">进入主设备资料库</button>
+    <button class="btn ghost" onclick="enterGuest()">以游客身份继续（我的独立资料库）</button>
+  </div>
+</div>
+
+<div class="login-mask hidden" id="adminMask">
+  <div class="login-card wide">
+    <h2>🗂 资料库总览</h2>
+    <p>每个设备一个独立资料库，互不可见。可清理不再使用的游客库。</p>
+    <div id="adminList" class="admin-list"></div>
+    <button class="btn ghost" onclick="closeAdminPanel()">关闭</button>
+  </div>
+</div>
+
+<div class="login-mask hidden" id="libMask">
+  <div class="login-card wide">
+    <h2>🔑 我的资料库</h2>
+    <p>每台设备（每个浏览器）一个独立资料库。记下编号，换设备或清缓存后可用它把资料带回来。</p>
+
+    <div class="field">
+      <label>本机资料库编号</label>
+      <div class="code-row">
+        <div class="code-box" id="libCode">—</div>
+        <button class="mini" onclick="copyLibCode()">复制</button>
+      </div>
+      <p class="hint" id="libStat">—</p>
+    </div>
+
+    <div class="field" id="libLinkField">
+      <label>恢复链接（发到自己另一台设备打开即可）</label>
+      <div class="code-row">
+        <div class="code-box" id="libLink">—</div>
+        <button class="mini" onclick="copyLibLink()">复制</button>
+      </div>
+    </div>
+
+    <div class="field" id="libRestoreField">
+      <label>用编号进入其他资料库</label>
+      <input type="text" id="restoreInput" placeholder="粘贴资料库编号，例如 g_1a2b3c..." />
+      <p class="hint">换设备、清过浏览器缓存，都会得到一个新的空库。填入原编号即可回到原资料库。</p>
+      <button class="btn" style="margin-top:10px;" onclick="doRestore()">进入这个资料库</button>
+    </div>
+
+    <p class="hint" id="libResetLine" style="border-top:1px solid var(--border);padding-top:12px;">
+      想重新开始？<button class="link-btn" onclick="resetLib()">换一个新的空资料库</button>
+      当前库的数据不会被删除，只是本机不再使用它。
+    </p>
+
+    <button class="btn ghost" onclick="openLoginFromLib()">以管理员身份进入主库</button>
+    <button class="btn ghost" onclick="closeLibPanel()">关闭</button>
+  </div>
+</div>
+
+<script>
+const API = "/api";
+let MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+// 当前设备身份：主设备（管理员）或游客（自有独立资料库）
+const STATE = {
+  tenant: "", role: "", isMain: false, canWrite: false,
+  sharedFallback: false, authRequired: false, mainTenant: "admin",
+  docCount: 0,
+};
+
+// ---------- 平台 sharecode 透传 ----------
+// 部署平台要求所有请求带 sharecode（网关控权）；sharecode 兜底取值：
+// 部分内置浏览器/App 打开链接会丢弃 query 参数，因此再依次尝试 referrer 与本地记忆。
+const SHARECODE = (() => {
+  const fromQuery = new URLSearchParams(location.search).get("sharecode");
+  if (fromQuery) { try { localStorage.setItem("rag_sharecode", fromQuery); } catch (e) {} return fromQuery; }
+  try {
+    const ref = new URL(document.referrer);
+    const fromRef = new URLSearchParams(ref.search).get("sharecode");
+    if (fromRef) { try { localStorage.setItem("rag_sharecode", fromRef); } catch (e) {} return fromRef; }
+  } catch (e) {}
+  try { return localStorage.getItem("rag_sharecode") || ""; } catch (e) { return ""; }
+})();
+function withSc(url) {
+  if (!SHARECODE) return url;
+  return url + (url.includes("?") ? "&" : "?") + "sharecode=" + encodeURIComponent(SHARECODE);
+}
+
+// ---------- 令牌（只有主设备需要）----------
+const TOKEN_KEY = "rag_token";
+function getToken() { try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; } }
+function setToken(t) {
+  try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+  document.cookie = t ? "rag_token=" + encodeURIComponent(t) + "; path=/; max-age=604800; SameSite=Lax"
+                      : "rag_token=; path=/; max-age=0";
+}
+
+// ---------- 游客设备标识（本机专属，等同于这台设备的私有钥匙）----------
+const GUEST_KEY = "rag_guest_tenant";
+function randHex(bytes) {
+  const a = new Uint8Array(bytes);
+  (window.crypto || window.msCrypto).getRandomValues(a);
+  return Array.from(a, b => b.toString(16).padStart(2, "0")).join("");
+}
+function setGuestTenant(t) {
+  try { t ? localStorage.setItem(GUEST_KEY, t) : localStorage.removeItem(GUEST_KEY); } catch (e) {}
+}
+function guestTenant() {
+  let t = "";
+  try { t = localStorage.getItem(GUEST_KEY) || ""; } catch (e) {}
+  if (!/^[A-Za-z0-9_-]{4,64}$/.test(t)) {
+    t = "g_" + randHex(12);
+    setGuestTenant(t);
+  }
+  return t;
+}
+// 恢复链接：把 sharecode 与资料库编号都放进去，发到另一台设备打开即可回来
+function libraryLink() {
+  const q = new URLSearchParams();
+  if (SHARECODE) q.set("sharecode", SHARECODE);
+  q.set("lib", STATE.isMain ? STATE.tenant : guestTenant());
+  return location.origin + location.pathname + "?" + q.toString();
+}
+function copyText(text, okMsg) {
+  const done = () => toast(okMsg || "已复制");
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); done(); } catch (e) { toast("复制失败，请手动选中复制"); }
+  document.body.removeChild(ta);
+}
+
+// ---------- 统一请求 ----------
+// 租户与令牌都放在 POST body 里：平台网关会剥离 Authorization 头 / 查询参数 / Cookie，
+// 只放行 sharecode 与请求体，这是唯一在本地和线上都稳定的通道。
+async function api(path, body) {
+  const payload = Object.assign({ tenant: STATE.tenant }, body || {});
+  const t = getToken();
+  if (t) payload.token = t;
+  const headers = { "Content-Type": "application/json" };
+  if (t) headers["Authorization"] = "Bearer " + t;
+  return fetch(withSc(API + path), { method: "POST", headers, body: JSON.stringify(payload) });
+}
+async function apiJson(path, body) {
+  const r = await api(path, body);
+  if (!r.ok) return null;
+  return r.json();
+}
+
+// ---------- 身份渲染 ----------
+function applyIdentity() {
+  const badge = document.getElementById("authBadge");
+  let label;
+  if (STATE.isMain) {
+    label = STATE.role === "admin" ? "🔓 主设备 · 管理员"
+          : STATE.role === "user" ? "👁 主库 · 只读"
+          : "📚 共享主库 · 只读";
+  } else {
+    label = "👤 游客 · 我的资料库";
+  }
+  badge.textContent = label;
+  badge.title = STATE.isMain ? "点击切换为游客模式" : "点击输入管理员口令，进入主设备资料库";
+
+  document.getElementById("uploadSection").hidden = !STATE.canWrite;
+  document.getElementById("readonlyNotice").hidden = STATE.canWrite;
+  document.getElementById("adminBtn").hidden = STATE.role !== "admin";
+
+  const tag = document.getElementById("tenantTag");
+  tag.textContent = STATE.isMain ? "库 " + STATE.tenant : "库 " + STATE.tenant.slice(0, 8);
+  tag.title = "资料库标识：" + STATE.tenant + "（点击查看编号 / 恢复 / 换库）";
+
+  const n = document.getElementById("libNotice");
+  if (!STATE.isMain && STATE.sharedFallback) {
+    n.hidden = false;
+    n.innerHTML = "🧪 你的资料库还没有文档，当前问答会检索 <b>共享主库</b>（只读）。上传第一篇文档后，回答就只基于你自己的资料。";
+  } else if (!STATE.isMain) {
+    n.hidden = false;
+    n.innerHTML = "🔒 这是你这台设备的独立资料库，上传的文档只进这里，其他设备看不到。换设备想带走？<button class=\"link-btn\" onclick=\"openLibPanel()\">查看资料库编号</button>";
+  } else {
+    n.hidden = true;
+  }
+}
+
+function setIdentity(s) {
+  STATE.tenant = s.tenant;
+  STATE.role = s.role;
+  STATE.isMain = !!s.is_main;
+  STATE.canWrite = !!s.can_write;
+  STATE.sharedFallback = !!s.shared_fallback;
+  STATE.docCount = s.doc_count || 0;
+  applyIdentity();
+}
+
+function showLogin(msg) {
+  document.getElementById("loginErr").textContent = msg || "";
+  document.getElementById("loginMask").classList.remove("hidden");
+  const inp = document.getElementById("pwInput");
+  inp.value = ""; setTimeout(() => inp.focus(), 50);
+}
+function hideLogin() { document.getElementById("loginMask").classList.add("hidden"); }
+function openLogin() { showLogin(""); }
+
+function onIdentityClick() {
+  if (STATE.isMain) {
+    if (confirm("切换为游客模式？\n主设备资料库的数据不会受影响，随时可以用口令切回来。")) {
+      setToken(""); enterGuest();
+    }
+  } else {
+    openLibPanel();
+  }
+}
+
+// ---------- 我的资料库面板（编号 / 恢复 / 换新库）----------
+function openLibPanel() {
+  const code = STATE.isMain ? STATE.tenant : guestTenant();
+  document.getElementById("libCode").textContent = code;
+  document.getElementById("libStat").textContent = STATE.isMain
+    ? "主设备资料库（凭管理员口令进入，编号本身不能单独恢复）"
+    : `本机独立资料库 · ${STATE.docCount || 0} 篇文档 · 其他设备看不到这里的内容`;
+  document.getElementById("libLink").textContent = libraryLink();
+  document.getElementById("libLinkField").hidden = STATE.isMain;
+  document.getElementById("libRestoreField").hidden = false;
+  document.getElementById("libResetLine").hidden = STATE.isMain;
+  document.getElementById("restoreInput").value = "";
+  document.getElementById("libMask").classList.remove("hidden");
+}
+function closeLibPanel() { document.getElementById("libMask").classList.add("hidden"); }
+function openLoginFromLib() { closeLibPanel(); openLogin(); }
+
+function copyLibCode() {
+  copyText(STATE.isMain ? STATE.tenant : guestTenant(), "资料库编号已复制");
+}
+function copyLibLink() { copyText(libraryLink(), "恢复链接已复制"); }
+
+async function doRestore() {
+  const raw = document.getElementById("restoreInput").value.trim();
+  if (!raw) { toast("请先粘贴资料库编号"); return; }
+  const t = raw.replace(/\s+/g, "");
+  if (!/^[A-Za-z0-9_-]{4,64}$/.test(t)) { toast("编号格式不对，请检查是否粘全"); return; }
+
+  // 先确认这个编号真的存在于服务端，避免进到一个空库还以为资料丢了
+  const info = await apiJson("/tenant/check", { tenant: t });
+  if (!info) { toast("校验失败，请稍后重试"); return; }
+  if (!info.exists) { toast("没有找到这个资料库，请确认编号是否完整"); return; }
+  if (info.is_main) { closeLibPanel(); openLogin(); return; }
+
+  setGuestTenant(t);
+  setToken("");
+  const s = await apiJson("/session", { tenant: t });
+  if (!s) { toast("进入失败，请重试"); return; }
+  closeLibPanel();
+  setIdentity(s);
+  await loadDocs();
+  toast(`已进入资料库，共 ${s.doc_count} 篇文档`);
+}
+
+function resetLib() {
+  if (!confirm("换一个新的空资料库？\n当前资料库不会被删除，用现在这个编号还能找回。")) return;
+  const old = guestTenant();
+  setGuestTenant("");
+  const fresh = guestTenant();
+  copyText(old, "新资料库已创建，旧编号已复制（可随时找回）");
+  closeLibPanel();
+  enterGuest();
+}
+
+function logout() { setToken(""); enterGuest(); }
+
+// ---------- 进入游客模式（每台设备独立的资料库）----------
+async function enterGuest() {
+  setToken("");
+  hideLogin();
+  const s = await apiJson("/session", { tenant: guestTenant() });
+  if (!s) { toast("初始化失败，请刷新重试"); return; }
+  setIdentity(s);
+  await loadDocs();
+}
+
+// ---------- 主设备登录 ----------
+async function doLogin() {
+  const pw = document.getElementById("pwInput").value;
+  try {
+    const r = await fetch(withSc(API + "/login"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw }),
+    });
+    if (!r.ok) { document.getElementById("loginErr").textContent = "口令不正确"; return; }
+    const d = await r.json();
+    if (!d.auth_required) {
+      document.getElementById("loginErr").textContent = "本实例未设置管理员口令，主库为只读共享库";
+      return;
+    }
+    setToken(pw);
+    const s = await apiJson("/session", { tenant: d.tenant || STATE.mainTenant });
+    if (!s) { setToken(""); document.getElementById("loginErr").textContent = "进入主库失败，请检查口令"; return; }
+    STATE.mainTenant = s.tenant;
+    setIdentity(s);
+    hideLogin();
+    await loadDocs();
+  } catch (e) {
+    document.getElementById("loginErr").textContent = "登录请求失败";
+  }
+}
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+// ---------- 文档列表 ----------
+async function loadDocs() {
+  const list = document.getElementById("docList");
+  const filter = document.getElementById("docFilter");
+  try {
+    const r = await api("/documents/list");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const docs = await r.json();
+    filter.innerHTML = '<option value="">全部</option>';
+    if (!docs.length) {
+      const tip = STATE.isMain
+        ? "暂无文档，先上传一份资料"
+        : "你的资料库还没有文档（问答暂用共享主库）";
+      list.innerHTML = '<span style="color:var(--muted);font-size:13px;">' + tip + "</span>";
+      return;
+    }
+    list.innerHTML = "";
+    docs.forEach(d => {
+      const item = document.createElement("div");
+      item.className = "doc-item";
+      const delBtn = STATE.canWrite
+        ? `<button title="删除" onclick="delDoc('${d.doc_id}')">✕</button>`
+        : "";
+      item.innerHTML = `<span class="name" title="${escapeHtml(d.name)}">${escapeHtml(d.name)}</span>
+        <span class="meta">${d.chunk_count}块</span>
+        ${delBtn}`;
+      list.appendChild(item);
+
+      const opt = document.createElement("option");
+      opt.value = d.doc_id; opt.textContent = d.name;
+      filter.appendChild(opt);
+    });
+  } catch (e) {
+    document.getElementById("docList").innerHTML =
+      '<span style="color:#e5484d;font-size:13px;line-height:1.6;">无法连接服务<br><span style="color:var(--muted);">请确认已启动：双击 start.bat</span></span>';
+    toast("加载文档列表失败");
+  }
+}
+
+// ---------- 上传（只进当前设备的资料库）----------
+async function uploadFile(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("tenant", STATE.tenant);
+  const t = getToken();
+  if (t) fd.append("token", t);
+  toast("正在解析与入库…");
+  const r = await fetch(withSc(API + "/documents"), { method: "POST", body: fd });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    toast("上传失败: " + (e.detail || r.status));
+    return;
+  }
+  toast("已入库到本设备资料库");
+  const s = await apiJson("/session", {});
+  if (s) setIdentity(s);
+  loadDocs();
+}
+
+document.getElementById("file").addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (f) {
+    if (f.size > MAX_UPLOAD_BYTES) {
+      toast(`文件过大：单文件最大 ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB`);
+      e.target.value = ""; return;
+    }
+    uploadFile(f);
+  }
+  e.target.value = "";
+});
+
+async function delDoc(docId) {
+  if (!confirm("确定删除该文档及其所有切片？（只影响本设备资料库）")) return;
+  const r = await api("/documents/delete", { doc_id: docId });
+  if (r.ok) { toast("已删除"); loadDocs(); }
+  else toast("删除失败");
+}
+
+// ---------- 管理员：资料库总览 ----------
+async function openAdminPanel() {
+  const list = await apiJson("/admin/tenants", { tenant: STATE.mainTenant });
+  if (!list) { toast("无权限查看"); return; }
+  const box = document.getElementById("adminList");
+  box.innerHTML = list.map(t => {
+    const kind = t.kind === "admin" ? "主设备" : "游客";
+    const del = t.kind === "admin" ? "" : `<button onclick="delTenant('${t.tenant}')">删除</button>`;
+    return `<div class="admin-row">
+      <span class="t">${escapeHtml(t.tenant)}</span>
+      <span class="m">${kind} · ${t.doc_count} 篇 · ${t.last_seen || "—"}</span>
+      ${del}
+    </div>`;
+  }).join("") || '<span style="color:var(--muted);font-size:13px;">还没有任何资料库</span>';
+  document.getElementById("adminMask").classList.remove("hidden");
+}
+function closeAdminPanel() { document.getElementById("adminMask").classList.add("hidden"); }
+
+async function delTenant(t) {
+  if (!confirm("删除资料库 " + t + " 及其全部文档？不可恢复。")) return;
+  const r = await api("/admin/tenants/delete", { tenant: t });
+  if (r.ok) { toast("已删除"); openAdminPanel(); }
+  else toast("删除失败");
+}
+
+// ---------- 问答 ----------
+function renderAnswerText(text) {
+  return text.replace(/\[(\d+)\]/g, (m, n) =>
+    `<a class="cite" href="#src-${n}" onclick="jump(${n})">[${n}]</a>`);
+}
+
+function jump(n) {
+  const el = document.getElementById("src-" + n);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function emptyHide() { document.getElementById("empty").style.display = "none"; }
+
+function addMessage() {
+  emptyHide();
+  const chat = document.getElementById("chat");
+  const wrap = document.createElement("div");
+  wrap.style.marginBottom = "22px";
+  chat.appendChild(wrap);
+  chat.scrollTop = chat.scrollHeight;
+  return wrap;
+}
+
+async function ask() {
+  const q = document.getElementById("question").value.trim();
+  if (!q) { toast("请输入问题"); return; }
+  const stream = document.getElementById("streamToggle").checked;
+  const docId = document.getElementById("docFilter").value;
+  document.getElementById("question").value = "";
+  const btn = document.getElementById("askBtn");
+  btn.disabled = true;
+
+  const wrap = addMessage();
+  wrap.innerHTML = `<div style="font-size:13px;color:var(--muted);margin-bottom:6px;">你：${escapeHtml(q)}</div>`;
+  const ans = document.createElement("div");
+  ans.className = "answer-card";
+  ans.innerHTML = '<span class="spinner"></span> 思考中…';
+  wrap.appendChild(ans);
+
+  try {
+    if (stream) {
+      await streamAsk(q, docId, ans, wrap);
+    } else {
+      const r = await api("/query", { question: q, doc_id: docId, stream: false });
+      if (!r.ok) { ans.innerHTML = await errorText(r); return; }
+      const data = await r.json();
+      ans.innerHTML = renderAnswerText(data.answer || "");
+      if (data.shared_fallback) addFallbackNote(wrap);
+      renderSources(wrap, data.citations || []);
+    }
+  } catch (e) {
+    ans.innerHTML = "请求出错：" + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// 把接口错误翻译成一句人话（429 是限流，最容易踩到）
+async function errorText(r) {
+  let detail = "";
+  try { detail = (await r.json()).detail || ""; } catch (e) {}
+  if (r.status === 429) return "⏳ " + (detail || "提问太频繁，请稍后再试");
+  if (r.status === 401) return "🔐 " + (detail || "需要管理员口令");
+  if (r.status === 413) return "📦 " + (detail || "文件太大");
+  return "⚠️ " + (detail || ("请求失败（HTTP " + r.status + "）"));
+}
+
+async function streamAsk(q, docId, ans, wrap) {
+  const resp = await api("/query/stream", { question: q, doc_id: docId, stream: true });
+  if (!resp.ok) { ans.innerHTML = await errorText(resp); return; }
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", acc = "";
+  ans.innerHTML = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith("data:")) continue;
+      const ev = JSON.parse(line.slice(5).trim());
+      if (ev.type === "token") { acc += ev.text; ans.innerHTML = renderAnswerText(acc); }
+      else if (ev.type === "done") {
+        if (ev.shared_fallback) addFallbackNote(wrap);
+        renderSources(wrap, ev.citations || []);
+      }
+      else if (ev.type === "error") { ans.textContent = "⚠️ " + ev.message; }
+    }
+    document.getElementById("chat").scrollTop = document.getElementById("chat").scrollHeight;
+  }
+}
+
+function addFallbackNote(wrap) {
+  const div = document.createElement("div");
+  div.className = "lib-notice";
+  div.style.marginTop = "10px";
+  div.textContent = "本条回答检索自共享主库（你自己的资料库还没有文档）";
+  wrap.appendChild(div);
+}
+
+function renderSources(wrap, citations) {
+  if (!citations.length) return;
+  const box = document.createElement("div");
+  box.className = "sources";
+  box.innerHTML = '<p class="section-title">📎 引用出处</p>';
+  citations.forEach(c => {
+    const card = document.createElement("div");
+    card.className = "source-card";
+    card.id = "src-" + c.index;
+    const pg = c.page ? `第 ${c.page} 页` : "全文";
+    card.innerHTML = `<div class="top">
+        <span class="idx">${c.index}</span>
+        <span class="src">${escapeHtml(c.doc_name || "未知")}</span>
+        <span class="pg">· ${pg}</span>
+      </div>
+      <div class="txt">${escapeHtml(c.text)}</div>`;
+    box.appendChild(card);
+  });
+  wrap.appendChild(box);
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, m => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]
+  ));
+}
+
+// ---------- 启动 ----------
+async function init() {
+  // 恢复链接：?lib=<编号> 表示「把这个资料库绑到当前设备」
+  // 处理完立刻从地址栏抹掉，否则以后每次打开都会覆盖本机设置
+  try {
+    const params = new URLSearchParams(location.search);
+    const lib = (params.get("lib") || "").trim();
+    if (/^[A-Za-z0-9_-]{4,64}$/.test(lib)) {
+      setGuestTenant(lib);
+      setToken("");
+      params.delete("lib");
+      const q = params.toString();
+      history.replaceState(null, "", location.pathname + (q ? "?" + q : ""));
+    }
+  } catch (e) {}
+
+  let health = {};
+  try { health = await (await fetch(withSc(API + "/health"))).json(); } catch (e) { health = {}; }
+  STATE.mainTenant = health.default_tenant || "admin";
+  STATE.authRequired = !!health.auth_required;
+  const mb = health.max_upload_mb || 10;
+  MAX_UPLOAD_BYTES = mb * 1024 * 1024;
+  document.getElementById("uploadHint").textContent = `支持 txt / md / pdf / docx · 单文件 ≤ ${mb}MB`;
+
+  // 记住过口令 -> 先尝试主设备资料库
+  if (getToken()) {
+    const s = await apiJson("/session", { tenant: STATE.mainTenant });
+    if (s) { setIdentity(s); hideLogin(); await loadDocs(); return; }
+    setToken("");
+  }
+  await enterGuest();
+}
+
+init();
+</script>
+</body>
+</html>
