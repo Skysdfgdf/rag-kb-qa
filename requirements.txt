@@ -6,10 +6,16 @@ pydantic>=2.5
 pydantic-settings>=2.1
 
 # ── 向量库 ──
-chromadb>=0.4.22
+# 默认使用纯 NumPy 实现（app/np_backend.py，个人知识库规模毫秒级检索）
+numpy>=1.26
+# 可选后端：chromadb 1.x 的 Rust 绑定在 PyInstaller 打包后会段错误，
+# 仅在源码运行且显式设置 VECTOR_BACKEND=chroma 时才需要安装
+# chromadb>=0.4.22
 
 # ── Embedding（本地，轻量 onnx，无 torch）──
+# 注意：onnxruntime 锁定 1.20.x —— 新版本在 PyInstaller 打包后 import 会段错误
 fastembed>=0.2.0
+onnxruntime>=1.20.1,<1.21
 rank_bm25>=0.2.2          # 可选：用于 BM25 + RRF 重排
 
 # ── 文档解析 ──

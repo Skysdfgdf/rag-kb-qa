@@ -1,11 +1,17 @@
 """全局配置（基于 pydantic-settings，可从 .env 或环境变量读取）。"""
 from pathlib import Path
 
+import sys
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # app/ 目录；项目根 = app/ 的上一级
 APP_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = APP_DIR.parent
+if getattr(sys, "frozen", False):
+    # PyInstaller 打包后：.env / data/ / frontend/ 都放在 exe 同级目录
+    PROJECT_ROOT = Path(sys.executable).resolve().parent
+else:
+    PROJECT_ROOT = APP_DIR.parent
 
 
 class Settings(BaseSettings):
@@ -24,6 +30,9 @@ class Settings(BaseSettings):
     # ---------- 向量库 ----------
     chroma_path: str = str(PROJECT_ROOT / "data" / "chroma")
     collection_name: str = "kb_default"
+    # 向量后端：numpy（默认，纯 Python 实现，exe 打包安全）| chroma（chromadb）
+    # chromadb 1.x 的 Rust 绑定在 PyInstaller 下会段错误，故 exe 必须用 numpy
+    vector_backend: str = "numpy"
 
     # ---------- 数据目录 ----------
     data_dir: str = str(PROJECT_ROOT / "data")

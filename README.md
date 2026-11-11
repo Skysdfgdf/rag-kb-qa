@@ -45,7 +45,22 @@ python run.py
 
 Windows 用户可以直接双击根目录的 **`start.bat`**：它会检查 Python 环境、检测 8000 端口是否被占用，启动服务后自动打开浏览器；关闭该黑窗口即停止服务。
 
-> 连不上 HuggingFace 时（国内网络常见），把 `.env` 里的 `EMBEDDING_PROVIDER` 改成 `offline`，启动立刻完成，无需等待模型下载。切换 embedding 实现后必须清空 `data/chroma` 重建库，否则向量维度不一致会报错。
+### 📦 打包为 Windows exe（免 Python 环境）
+
+```bash
+python build_exe.py
+```
+
+产物在 `dist/rag-kb-qa/`（onedir 模式）：双击 `rag-kb-qa.exe` 即启动服务并自动打开浏览器，关闭窗口即停止。`.env`、`data/`、`frontend/` 都放在 exe 同级目录，**整个文件夹拷贝到其他 Windows 电脑即可运行**（无需安装 Python）。
+
+注意事项：
+
+- 向量后端默认使用纯 NumPy 实现（`app/np_backend.py`）。chromadb 1.x 的 Rust 原生绑定在 PyInstaller 打包后必然段错误，因此 exe 版本不支持 `VECTOR_BACKEND=chroma`。
+- 打包环境要求 `onnxruntime` 为 1.20.x（新版在打包后 import 即崩溃，`requirements.txt` 已锁定）。
+- 想把现有资料库带进 exe：把 `data/` 和 `.env` 拷到 exe 同级目录即可（向量数据在 `data/vecstore/<租户>/`）。
+- 重新打包前若提示 dist 目录被占用/残留，先手动删除 `dist/rag-kb-qa`。
+
+> 连不上 HuggingFace 时（国内网络常见），把 `.env` 里的 `EMBEDDING_PROVIDER` 改成 `offline`，启动立刻完成，无需等待模型下载。切换 embedding 实现后必须清空向量库重建（chroma 后端为 `data/chroma`，numpy 后端为 `data/vecstore`），否则向量维度不一致会报错。
 启动后左侧上传文档，右侧输入问题即可。
 
 ## 🔌 切换大模型 / Embedding
@@ -101,7 +116,9 @@ rag-kb-qa/
 ├── app/
 │   ├── config.py        # 配置（pydantic-settings）
 │   ├── embeddings.py    # Embedding 抽象 + FastEmbed/OpenAI 实现
-│   ├── vectorstore.py   # Chroma 封装（add/query/delete）
+│   ├── vectorstore.py   # 向量库统一入口（numpy / chroma 双后端）
+│   ├── np_backend.py    # 纯 NumPy 向量后端（默认，exe 打包安全）
+│   ├── chroma_backend.py# chromadb 后端（可选，仅源码运行）
 │   ├── ingest.py        # 文档解析 + 递归切分
 │   ├── retriever.py     # 向量召回 + BM25 RRF 重排
 │   ├── generator.py     # Prompt 构建 + LLM 调用 + 引用解析

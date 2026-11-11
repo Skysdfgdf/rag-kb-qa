@@ -1,31 +1,21 @@
-"""Chroma 向量库的轻封装（按租户隔离）。
+"""向量库统一入口（按租户隔离）。
+
+通过 settings.vector_backend 选择底层实现：
+  - numpy  （默认）纯 NumPy 余弦检索，零原生依赖，PyInstaller 打包安全
+  - chroma         原 chromadb 实现（个人知识库场景下可回退使用）
+
+两个后端对外接口完全一致：VectorStore(tenant).add/query/delete_by_doc/count/drop
+以及模块级 drop_collection(tenant)。
 
 每个租户一个独立 collection：
-  - 主设备（默认租户）沿用 settings.collection_name（默认 kb_default），
-    这样升级到多租户后老数据无需重新 embedding；
-  - 其他租户使用 kb_<tenant_id>，超过 Chroma 的 63 字符上限时改用哈希名。
-
-多个 collection 共享同一个 data/chroma 持久化目录，但彼此不可见。
+  - 主设备（默认租户）沿用 settings.collection_name（默认 kb_default）；
+  - 其他租户使用 kb_<tenant_id>（chroma 后端；numpy 后端按租户目录隔离）。
 """
 import hashlib
-import uuid
-from typing import Dict, List, Optional
-
-import chromadb
+from typing import Dict, Optional
 
 from . import tenants
 from .config import settings
-from .embeddings import get_embedder
-
-_client = None
-
-
-def get_client():
-    """全局共享一个 PersistentClient（重复创建会互相抢锁并告警）。"""
-    global _client
-    if _client is None:
-        _client = chromadb.PersistentClient(path=settings.chroma_path)
-    return _client
 
 
 def collection_name(tenant: str) -> str:
@@ -39,71 +29,38 @@ def collection_name(tenant: str) -> str:
 
 
 def drop_collection(tenant: str) -> bool:
-    """按租户名直接删 collection。
+    if settings.vector_backend == "numpy":
+        from .np_backend import drop_collection as np_drop
+        return np_drop(tenant)
+    from .chroma_backend import drop_collection as chroma_drop
+    return chroma_drop(tenant)
 
-    注意：不能在“缓存里没这个租户”时就跳过——那样只删了目录、向量数据
-    会永久留在磁盘上（服务重启后管理员清理游客库就会踩到）。
-    """
-    try:
-        get_client().delete_collection(collection_name(tenant))
-        return True
-    except Exception:  # noqa: BLE001 集合本就不存在
-        return False
+
+def _make(tenant: Optional[str]):
+    if settings.vector_backend == "numpy":
+        from .np_backend import get_or_create
+        return get_or_create(tenants.normalize(tenant or settings.default_tenant))
+    from .chroma_backend import ChromaVectorStore
+    return ChromaVectorStore(tenant)
 
 
 class VectorStore:
+    """后端代理：按配置转发到 numpy / chroma 实现。"""
+
     def __init__(self, tenant: Optional[str] = None):
-        self.tenant = tenants.normalize(tenant)
-        self.name = collection_name(self.tenant)
-        self.client = get_client()
-        self.collection = self.client.get_or_create_collection(
-            name=self.name,
-            metadata={"hnsw:space": "cosine"},  # 余弦距离，值越小越相似
-        )
-        self.embedder = get_embedder()
+        self._impl = _make(tenant)
 
-    def add(
-        self,
-        texts: List[str],
-        metadatas: List[Dict],
-        ids: Optional[List[str]] = None,
-    ) -> List[str]:
-        if not texts:
-            return []
-        if ids is None:
-            ids = [str(uuid.uuid4()) for _ in texts]
-        embeddings = self.embedder.embed_documents(texts)
-        self.collection.add(
-            embeddings=embeddings,
-            documents=texts,
-            metadatas=metadatas,
-            ids=ids,
-        )
-        return ids
+    def add(self, texts, metadatas, ids=None):
+        return self._impl.add(texts, metadatas, ids)
 
-    def query(
-        self,
-        text: str,
-        n_results: int = 20,
-        where: Optional[Dict] = None,
-    ) -> Dict:
-        q_emb = self.embedder.embed_query(text)
-        return self.collection.query(
-            query_embeddings=[q_emb],
-            n_results=n_results,
-            where=where,
-            include=["documents", "metadatas", "distances"],
-        )
+    def query(self, text, n_results: int = 20, where: Optional[Dict] = None):
+        return self._impl.query(text, n_results=n_results, where=where)
 
     def delete_by_doc(self, doc_id: str) -> None:
-        self.collection.delete(where={"doc_id": doc_id})
+        self._impl.delete_by_doc(doc_id)
 
     def count(self) -> int:
-        return self.collection.count()
+        return self._impl.count()
 
     def drop(self) -> None:
-        """删除整个 collection（管理员清理游客库时使用）。"""
-        try:
-            self.client.delete_collection(self.name)
-        except Exception:  # noqa: BLE001 集合本就不存在时忽略
-            pass
+        self._impl.drop()
