@@ -51,14 +51,17 @@ Windows 用户可以直接双击根目录的 **`start.bat`**：它会检查 Pyth
 python build_exe.py
 ```
 
-产物在 `dist/rag-kb-qa/`（onedir 模式）：双击 `rag-kb-qa.exe` 即启动服务并自动打开浏览器，关闭窗口即停止。`.env`、`data/`、`frontend/` 都放在 exe 同级目录，**整个文件夹拷贝到其他 Windows 电脑即可运行**（无需安装 Python）。
+产物在 `dist/rag-kb-qa/`（onedir 模式）。双击 `rag-kb-qa.exe` 后**不弹黑色控制台窗口**：服务在后台启动、自动打开浏览器，右下角任务栏出现托盘图标；**右键托盘图标 → 退出**才会停止服务。关闭浏览器标签页不影响服务，重复双击也只会打开一次页面（不会起第二个实例）。
+
+`.env`、`data/`、`frontend/` 都放在 exe 同级目录，**整个文件夹拷贝到其他 Windows 电脑即可运行**（无需安装 Python）。运行日志写在同级的 `logs/app.log`，排查问题时看这里；`停止服务.bat` 用于托盘图标找不到时强制结束。
 
 注意事项：
 
 - 向量后端默认使用纯 NumPy 实现（`app/np_backend.py`）。chromadb 1.x 的 Rust 原生绑定在 PyInstaller 打包后必然段错误，因此 exe 版本不支持 `VECTOR_BACKEND=chroma`。
 - 打包环境要求 `onnxruntime` 为 1.20.x（新版在打包后 import 即崩溃，`requirements.txt` 已锁定）。
+- 托盘图标依赖 `pystray` + `Pillow`（打包脚本已声明 `pystray._win32` 隐藏导入）。
 - 想把现有资料库带进 exe：把 `data/` 和 `.env` 拷到 exe 同级目录即可（向量数据在 `data/vecstore/<租户>/`）。
-- 重新打包前若提示 dist 目录被占用/残留，先手动删除 `dist/rag-kb-qa`。
+- 重新打包前若提示 dist 目录被占用/残留，先手动删除（或改名）`dist/rag-kb-qa`。
 
 > 连不上 HuggingFace 时（国内网络常见），把 `.env` 里的 `EMBEDDING_PROVIDER` 改成 `offline`，启动立刻完成，无需等待模型下载。切换 embedding 实现后必须清空向量库重建（chroma 后端为 `data/chroma`，numpy 后端为 `data/vecstore`），否则向量维度不一致会报错。
 启动后左侧上传文档，右侧输入问题即可。
@@ -126,7 +129,10 @@ rag-kb-qa/
 │   ├── models.py        # 请求/响应模型
 │   └── main.py          # FastAPI 路由
 ├── frontend/index.html  # 单页前端（上传/问答/溯源）
-├── data/                # uploads + chroma + documents.json（运行时生成）
+├── launcher.py          # exe 入口：后台启动 + 托盘图标 + 自动开浏览器
+├── app_icon.py          # 用代码绘制程序图标/托盘图标
+├── build_exe.py         # 一键打包（PyInstaller onedir）
+├── data/                # uploads + vecstore + documents.json（运行时生成）
 ├── requirements.txt
 ├── .env.example
 ├── sync.py              # 本地库 -> 线上库 增量同步

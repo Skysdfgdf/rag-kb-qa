@@ -12,15 +12,26 @@ ROOT = Path(__file__).resolve().parent
 
 
 def main() -> None:
-    print("[1/3] 运行 PyInstaller（首次打包需几分钟，请耐心等待）...")
+    print("[0/4] 生成程序图标 ...")
+    from app_icon import save_ico
+
+    icon_path = save_ico(ROOT / "build" / "app.ico")
+
+    print("[1/4] 运行 PyInstaller（首次打包需几分钟，请耐心等待）...")
     subprocess.check_call(
         [
             sys.executable, "-m", "PyInstaller",
             "--noconfirm", "--clean",
-            "--onedir", "--console",
+            # --windowed：双击不弹黑色控制台窗口，服务在后台跑，托盘退出
+            "--onedir", "--windowed",
             "--name", "rag-kb-qa",
+            "--icon", str(icon_path),
             "--hidden-import", "app",
             "--hidden-import", "app.main",
+            "--hidden-import", "app_icon",
+            # 托盘图标（Windows 后端需显式声明）
+            "--hidden-import", "pystray._win32",
+            "--collect-submodules", "pystray",
             "--collect-submodules", "uvicorn",
             # onnxruntime 新版本（>=1.22）在 PyInstaller 下会段错误，需 1.20.x
             # 并强制收集其全部 DLL；requirements.txt 已锁定版本。
@@ -35,12 +46,24 @@ def main() -> None:
     )
 
     dist = ROOT / "dist" / "rag-kb-qa"
-    print("[2/3] 复制前端与初始化目录 ...")
+    print("[2/4] 复制前端与初始化目录 ...")
     shutil.copytree(ROOT / "frontend", dist / "frontend", dirs_exist_ok=True)
     (dist / "data").mkdir(exist_ok=True)
+    (dist / "logs").mkdir(exist_ok=True)
 
-    print("[3/3] 打包完成！")
+    print("[3/4] 生成「停止服务.bat」...")
+    (dist / "停止服务.bat").write_text(
+        "@echo off\r\n"
+        "chcp 65001 >nul\r\n"
+        "taskkill /F /IM rag-kb-qa.exe >nul 2>nul\r\n"
+        "if errorlevel 1 (echo 服务当前没有在运行) else (echo 已停止服务)\r\n"
+        "timeout /t 2 >nul\r\n",
+        encoding="utf-8",
+    )
+
+    print("[4/4] 打包完成！")
     print(f"  可执行程序: {dist / 'rag-kb-qa.exe'}")
+    print("  双击 exe 后无窗口，服务在后台运行，退出请右键托盘图标 → 退出")
     print("  提示: 把 .env 拷到 exe 同级目录可沿用原口令/模型配置；")
     print("        拷贝原 data/ 文件夹即可迁移已有知识库。")
 

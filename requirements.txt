@@ -27,3 +27,9 @@ openai>=1.12
 
 # ── 配置加载 ──
 python-dotenv>=1.0
+
+# ── 桌面版（打包 exe）──
+# 关闭控制台窗口后靠托盘图标常驻与退出
+pystray>=0.19
+pillow>=10.0
+pyinstaller>=6.0
