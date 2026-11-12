@@ -4,6 +4,16 @@
 上传文档后提问，系统返回答案并**标明每条结论的出处**（文件名 + 页码 + 原文片段），
 前端点击引用徽标即可跳转到对应来源。
 
+<p align="center">
+  <img src="assets/screenshot.png" width="880" alt="界面截图：左侧资料库，右侧提问并获得带引用出处的回答">
+</p>
+
+## 🏗️ 架构一览
+
+<p align="center">
+  <img src="assets/architecture.svg" width="880" alt="架构图：前端 → FastAPI（限流/解析/切分/向量化/检索/生成）→ 向量库与大模型 API">
+</p>
+
 ## ✨ 特性
 
 - **手写 RAG 链路**：解析 → 切分 → Embedding → 向量召回 → 重排 → 生成 → 引用解析，每一步都可见、可改。
@@ -18,7 +28,7 @@
 | 层 | 选型 | 说明 |
 |---|---|---|
 | 后端 | FastAPI | 文档上传 / 问答 / 管理 API |
-| 向量库 | Chroma | 本地持久化，零运维 |
+| 向量库 | 纯 NumPy 余弦检索（默认，exe 打包安全）/ Chroma（可选） | 本地持久化，零运维 |
 | Embedding | FastEmbed (BAAI/bge-small-zh-v1.5) | 本地 onnx，无需 torch |
 | 重排 | rank_bm25 + RRF | 手写融合 |
 | 大模型 | OpenAI 兼容 Chat API | 可接任意兼容服务 |

@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 570" width="900" height="570" font-family="'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/>
+    </marker>
+    <style>
+      .t-title { font-size: 15px; font-weight: 600; fill: #0f172a; }
+      .t-sub   { font-size: 11.5px; fill: #64748b; }
+      .t-step  { font-size: 13.5px; font-weight: 600; fill: #1e293b; }
+      .t-step2 { font-size: 11px; fill: #64748b; }
+      .box     { rx: 12; }
+    </style>
+  </defs>
+
+  <rect width="900" height="570" fill="#ffffff"/>
+
+  <!-- 前端 -->
+  <rect class="box" x="34" y="112" width="186" height="176" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+  <text class="t-title" x="52" y="142" fill="#1d4ed8">浏览器（网页前端）</text>
+  <text class="t-sub" x="52" y="172">· 上传文档</text>
+  <text class="t-sub" x="52" y="196">· 提问 · 流式显示答案</text>
+  <text class="t-sub" x="52" y="220">· 我的资料库（编号 / 恢复）</text>
+  <rect x="52" y="240" width="98" height="24" rx="12" fill="#dbeafe"/>
+  <text x="101" y="256" text-anchor="middle" font-size="11" fill="#1d4ed8">HTML + JS</text>
+
+  <line x1="222" y1="200" x2="252" y2="200" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="237" y="190" text-anchor="middle" font-size="10.5" fill="#94a3b8">HTTP</text>
+  <text x="237" y="215" text-anchor="middle" font-size="10.5" fill="#94a3b8">SSE</text>
+
+  <!-- 后端容器 -->
+  <rect x="252" y="66" width="330" height="424" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text class="t-title" x="272" y="96">FastAPI 服务端</text>
+  <text class="t-sub" x="272" y="116">多租户 · 角色鉴权 · 频率限制</text>
+
+  <!-- 步骤 1 -->
+  <rect class="box" x="272" y="132" width="290" height="50" fill="#ffffff" stroke="#cbd5e1"/>
+  <rect x="272" y="142" width="4" height="30" rx="2" fill="#2563eb"/>
+  <text class="t-step" x="290" y="154">① 识别租户 + 检查频率</text>
+  <text class="t-step2" x="290" y="171">按租户 / 全站双维度限流</text>
+
+  <line x1="417" y1="184" x2="417" y2="196" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 步骤 2 -->
+  <rect class="box" x="272" y="198" width="290" height="50" fill="#ffffff" stroke="#cbd5e1"/>
+  <rect x="272" y="208" width="4" height="30" rx="2" fill="#2563eb"/>
+  <text class="t-step" x="290" y="220">② 文档解析 → 语义切分</text>
+  <text class="t-step2" x="290" y="237">PDF / Word / txt / md · 480 字 / 80 重叠</text>
+
+  <line x1="417" y1="250" x2="417" y2="262" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 步骤 3 -->
+  <rect class="box" x="272" y="264" width="290" height="50" fill="#ffffff" stroke="#cbd5e1"/>
+  <rect x="272" y="274" width="4" height="30" rx="2" fill="#2563eb"/>
+  <text class="t-step" x="290" y="286">③ 文本转向量（Embedding）</text>
+  <text class="t-step2" x="290" y="303">BGE 中文小模型，本地运行无需 GPU</text>
+
+  <line x1="417" y1="316" x2="417" y2="328" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 步骤 4 -->
+  <rect class="box" x="272" y="330" width="290" height="50" fill="#ffffff" stroke="#cbd5e1"/>
+  <rect x="272" y="340" width="4" height="30" rx="2" fill="#2563eb"/>
+  <text class="t-step" x="290" y="352">④ 检索：先粗筛 20 段 → 精选 6 段</text>
+  <text class="t-step2" x="290" y="369">向量相似度 + 关键词打分融合</text>
+
+  <line x1="417" y1="382" x2="417" y2="394" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 步骤 5 -->
+  <rect class="box" x="272" y="396" width="290" height="50" fill="#ffffff" stroke="#cbd5e1"/>
+  <rect x="272" y="406" width="4" height="30" rx="2" fill="#2563eb"/>
+  <text class="t-step" x="290" y="418">⑤ 组织答案 + 标注出处</text>
+  <text class="t-step2" x="290" y="435">把 [1][2] 还原成文件名与原文片段</text>
+
+  <!-- 右侧：存储与大模型 -->
+  <rect class="box" x="650" y="198" width="216" height="52" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+  <text x="666" y="220" font-size="12.5" font-weight="600" fill="#b45309">文档清单 + 上传文件</text>
+  <text x="666" y="237" font-size="10.5" fill="#a16207">data/tenants/&lt;租户&gt;/</text>
+  <line x1="562" y1="224" x2="648" y2="224" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect class="box" x="650" y="264" width="216" height="52" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+  <text x="666" y="286" font-size="12.5" font-weight="600" fill="#b45309">向量库</text>
+  <text x="666" y="303" font-size="10.5" fill="#a16207">data/vecstore/&lt;租户&gt;/</text>
+  <line x1="562" y1="290" x2="648" y2="290" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect class="box" x="650" y="396" width="216" height="56" fill="#f5f3ff" stroke="#ddd6fe" stroke-width="1.5"/>
+  <text x="666" y="419" font-size="12.5" font-weight="600" fill="#6d28d9">大模型 API</text>
+  <text x="666" y="437" font-size="10.5" fill="#7c3aed">DeepSeek / 任意 OpenAI 兼容接口</text>
+  <line x1="562" y1="421" x2="648" y2="421" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- 底部说明 -->
+  <rect x="34" y="508" width="832" height="42" rx="10" fill="#f1f5f9"/>
+  <text x="50" y="525" font-size="11.5" fill="#475569">每个访客自动分配独立租户，文件目录、文档清单、向量集合三层隔离；</text>
+  <text x="50" y="542" font-size="11.5" fill="#475569">自己的库还没有文档时，会自动兜底检索共享主库，保证一打开就能用。</text>
+</svg>
